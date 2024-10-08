@@ -52,8 +52,6 @@ class MqttHASync : public BaseSync {
     private:
         MqttHASync();
 
-        bool attemptMqttHASyncConnect();
-
         HADevice *device;
         HAMqtt *mqtt;
         HABaseDeviceType *haSensors[Variable::VARIABLES_COUNT];

@@ -128,6 +128,7 @@ void setupHASensor(HASensor *sensor, const VariableUOM *uom) {
             break;
     }
     sensor->setUnitOfMeasurement(getVariableUOM(*uom));
+    sensor->setValue(nullptr);
 }
 
 MqttHASync::MqttHASync() : BaseSync() {
@@ -146,6 +147,7 @@ void MqttHASync::setup() {
     device->setManufacturer(PROJECT_AUTHOR);
     device->setModel(PROJECT_NAME);
     device->setSoftwareVersion(PROJECT_VERSION);
+    device->setConfigurationUrl(WiFi.localIP().toString().c_str());
     device->enableSharedAvailability();
     device->enableLastWill();
 
@@ -202,15 +204,16 @@ void MqttHASync::setup() {
                     }
             }
 
-            // haSensors[index]->setName(def->mqttTopic);
+            haSensors[index]->setName(def->text);
+
             if (strlen(Environment::getData()->mqttHADeviceId) <= 0) {
-                haSensors[index]->setName(def->text);
+                haSensors[index]->setObjectId(def->mqttTopic);
             } else {
                 char *idName = new char[strlen(Environment::getData()->mqttHADeviceId) + strlen(def->text) + 2];
                 strcpy(idName, Environment::getData()->mqttHADeviceId);
                 strcat(idName, " ");
                 strcat(idName, def->text);
-                haSensors[index]->setName(idName);
+                haSensors[index]->setObjectId(idName);
             }
         }
     }
@@ -226,35 +229,38 @@ Variable MqttHASync::findVariableBySensor(HABaseDeviceType *haSensor) {
     return Variable::VARIABLES_COUNT;
 }
 
-bool MqttHASync::attemptMqttHASyncConnect() {
-    if (!initialized) {
-        initialized = mqtt->begin(
-            Environment::getData()->mqttServerHostname,
-            Environment::getData()->mqttServerPort,
-            strlen(Environment::getData()->mqttUsername) > 0 ? Environment::getData()->mqttUsername : nullptr,
-            strlen(Environment::getData()->mqttPassword) > 0 ? Environment::getData()->mqttPassword : nullptr);
-    }
-    mqtt->loop();
-    return mqtt->isConnected();
-}
-
 void MqttHASync::connect(bool blocking) {
-    if(this->initialized){
+    if (this->initialized) {
         mqtt->disconnect();
     }
     this->initialized = false;
     debugPrintf(true, Text::setupWithName, "MQTT-HA");
-    debugPrint(Text::connecting);
 
-    uint8_t counter = 0;
+    uint8_t counter;
 
-    while (!attemptMqttHASyncConnect() && ( blocking || counter < 10) ) {
-        debugPrint(Text::dot);
-        delay(500);
-        counter++;
-      
-    }
-    debugPrintln(mqtt->isConnected() ? Text::ok : Text::ko);
+    do {
+        counter = 0;
+        debugPrint(Text::connecting);
+        if (!initialized) {
+            initialized = mqtt->begin(
+                Environment::getData()->mqttServerHostname,
+                Environment::getData()->mqttServerPort,
+                strlen(Environment::getData()->mqttUsername) > 0 ? Environment::getData()->mqttUsername : nullptr,
+                strlen(Environment::getData()->mqttPassword) > 0 ? Environment::getData()->mqttPassword : nullptr);
+        }
+        mqtt->loop();
+
+        while (!mqtt->isConnected() && counter < 10) {
+            debugPrint(Text::dot);
+            delay(500);
+            counter++;
+        }
+        if (mqtt->getState() != HAMqtt::StateConnected) {
+            debugPrintf(true, Text::errorWithCode, mqtt->getState());
+        } else {
+            debugPrintln(Text::ok);
+        }
+    } while (blocking && !mqtt->isConnected());
     Controller::getInstance().setErrorFlag(STATUS_ERR_NO_MQTT_CONNECTION, !mqtt->isConnected());
 }
 void MqttHASync::loop() {

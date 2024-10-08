@@ -107,27 +107,32 @@ void MqttSync::setup() {
     this->connect();
 }
 
-bool MqttSync::attemptMqttSyncConnect() {
-    mqttClient->connect(
-
-        Environment::getData()->mqttClientId,
-        strlen(Environment::getData()->mqttUsername) > 0 ? Environment::getData()->mqttUsername : nullptr,
-        strlen(Environment::getData()->mqttPassword) > 0 ? Environment::getData()->mqttPassword : nullptr);
-    return mqttClient->connected();
-}
-
 void MqttSync::connect(bool blocking) {
     debugPrintf(true, Text::setupWithName, "MQTT");
     debugPrint(Text::connecting);
 
     uint8_t counter = 0;
 
-    while (!attemptMqttSyncConnect() && ( blocking || counter < 10)) {
-        debugPrint(Text::dot);
-        delay(500);
-        counter++;
-    }
-    debugPrintln(mqtt->isConnected() ? Text::ok : Text::ko);
+    do {
+        mqttClient->connect(
+
+            Environment::getData()->mqttClientId,
+            strlen(Environment::getData()->mqttUsername) > 0 ? Environment::getData()->mqttUsername : nullptr,
+            strlen(Environment::getData()->mqttPassword) > 0 ? Environment::getData()->mqttPassword : nullptr);
+        while (!mqttClient->connected() && counter < 10) {
+            debugPrint(Text::dot);
+            delay(500);
+            counter++;
+        }
+
+        if (mqttClient->state() != MQTT_CONNECTED) {
+            debugPrintf(true, Text::errorWithCode, mqttClient->state());
+        } else {
+            debugPrintln(Text::ok);
+        }
+
+    } while (blocking && !mqttClient->connected());
+
     Controller::getInstance().setErrorFlag(STATUS_ERR_NO_MQTT_CONNECTION, !mqttClient->connected());
 }
 void MqttSync::loop() {

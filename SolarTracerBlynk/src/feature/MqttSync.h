@@ -50,8 +50,6 @@ class MqttSync : public BaseSync {
     private:
         MqttSync();
 
-        bool attemptMqttSyncConnect();
-
         PubSubClient *mqttClient;
 
         char mqttPublishBuffer[20];
